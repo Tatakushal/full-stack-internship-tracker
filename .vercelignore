@@ -1,0 +1,6 @@
+node_modules
+.next
+.git
+dev-server.log
+*.log
+full-stack-internship-tracker.zip

@@ -1,0 +1,850 @@
+"use client";
+
+import {
+  Activity,
+  BarChart3,
+  BriefcaseBusiness,
+  CalendarCheck,
+  CheckCircle2,
+  Code2,
+  Flame,
+  Github,
+  GraduationCap,
+  LayoutDashboard,
+  Link as LinkIcon,
+  Menu,
+  Plus,
+  Rocket,
+  Sparkles,
+  Target,
+  Trophy,
+  X
+} from "lucide-react";
+import { motion } from "framer-motion";
+import {
+  Area,
+  AreaChart,
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  Pie,
+  PieChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis
+} from "recharts";
+import { FormEvent, useEffect, useMemo, useState } from "react";
+
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
+import { Progress } from "@/components/ui/progress";
+import { cn } from "@/lib/utils";
+
+type Project = {
+  id: string;
+  title: string;
+  stack: string;
+  github: string;
+  deployment: string;
+  status: "Planning" | "Building" | "Done";
+};
+
+type Application = {
+  id: string;
+  company: string;
+  role: string;
+  status: "Wishlist" | "Applied" | "Interview" | "Offer";
+};
+
+type TrackerState = {
+  habits: Record<string, boolean>;
+  roadmap: Record<string, boolean>;
+  resume: Record<string, boolean>;
+  solved: {
+    arrays: number;
+    strings: number;
+    dp: number;
+    graphs: number;
+    trees: number;
+    easy: number;
+    medium: number;
+    hard: number;
+  };
+  projects: Project[];
+  applications: Application[];
+};
+
+const STORAGE_KEY = "full-stack-internship-tracker-v1";
+
+const navItems = [
+  ["overview", "Overview", LayoutDashboard],
+  ["roadmap", "Roadmap", Rocket],
+  ["habits", "Habits", CalendarCheck],
+  ["dsa", "DSA", Code2],
+  ["projects", "Projects", Github],
+  ["career", "Career", BriefcaseBusiness]
+] as const;
+
+const phases = [
+  {
+    id: "foundation",
+    title: "Foundation",
+    weeks: "Weeks 1-8",
+    skills: ["CS basics", "Git/GitHub", "JavaScript", "TypeScript", "Linux CLI"],
+    goals: ["Revise OOP and DBMS", "Solve 60 easy DSA problems", "Ship a portfolio v1"]
+  },
+  {
+    id: "frontend",
+    title: "Frontend Development",
+    weeks: "Weeks 9-20",
+    skills: ["React", "Next.js", "Tailwind CSS", "Accessibility", "State management"],
+    goals: ["Build 3 polished UIs", "Learn App Router patterns", "Practice responsive layouts"]
+  },
+  {
+    id: "backend",
+    title: "Backend Development",
+    weeks: "Weeks 21-32",
+    skills: ["Node.js", "REST APIs", "PostgreSQL", "Auth", "Testing"],
+    goals: ["Design CRUD APIs", "Add JWT/session auth", "Deploy a backend project"]
+  },
+  {
+    id: "advanced",
+    title: "Advanced Full Stack",
+    weeks: "Weeks 33-44",
+    skills: ["System design", "Caching", "Docker", "CI/CD", "Performance"],
+    goals: ["Refactor for scale", "Add observability", "Write technical case studies"]
+  },
+  {
+    id: "internship",
+    title: "Internship Preparation",
+    weeks: "Weeks 45-52",
+    skills: ["Resume", "Mock interviews", "Applications", "Networking", "Behavioral prep"],
+    goals: ["Apply to 80 companies", "Complete 12 mocks", "Polish top 3 projects"]
+  }
+];
+
+const habits = ["Code", "DSA", "Project", "Read", "Apply"];
+const resumeItems = ["One-page resume", "ATS keywords", "Portfolio live", "LinkedIn polished", "Project writeups"];
+const quotes = [
+  "Tiny commits become visible momentum.",
+  "Ship something today, even if it is small.",
+  "Consistency is the quiet superpower.",
+  "A polished project tells your story before you enter the room."
+];
+
+const initialState: TrackerState = {
+  habits: {},
+  roadmap: {},
+  resume: { "One-page resume": true, "Portfolio live": true },
+  solved: {
+    arrays: 42,
+    strings: 28,
+    dp: 14,
+    graphs: 10,
+    trees: 22,
+    easy: 88,
+    medium: 47,
+    hard: 8
+  },
+  projects: [
+    {
+      id: "1",
+      title: "Campus Course Planner",
+      stack: "Next.js, PostgreSQL, Tailwind",
+      github: "https://github.com/student/course-planner",
+      deployment: "https://course-planner.example.com",
+      status: "Done"
+    },
+    {
+      id: "2",
+      title: "AI Interview Notes",
+      stack: "React, Node.js, OpenAI API",
+      github: "",
+      deployment: "",
+      status: "Building"
+    }
+  ],
+  applications: [
+    { id: "1", company: "Stripe", role: "Frontend Intern", status: "Wishlist" },
+    { id: "2", company: "Atlassian", role: "Full Stack Intern", status: "Applied" },
+    { id: "3", company: "Microsoft", role: "SWE Intern", status: "Interview" }
+  ]
+};
+
+export function InternshipTracker() {
+  const [state, setState] = useState<TrackerState>(initialState);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [projectDraft, setProjectDraft] = useState({
+    title: "",
+    stack: "",
+    github: "",
+    deployment: "",
+    status: "Planning" as Project["status"]
+  });
+
+  useEffect(() => {
+    const stored = window.localStorage.getItem(STORAGE_KEY);
+    if (stored) {
+      setState({ ...initialState, ...JSON.parse(stored) });
+    }
+  }, []);
+
+  useEffect(() => {
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  }, [state]);
+
+  const days = useMemo(() => buildDays(), []);
+  const completedHabits = Object.values(state.habits).filter(Boolean).length;
+  const totalHabits = days.length * habits.length;
+  const habitPercent = Math.round((completedHabits / totalHabits) * 100);
+  const streak = calculateStreak(days, state.habits);
+  const roadmapPercent = Math.round(
+    (Object.values(state.roadmap).filter(Boolean).length /
+      phases.reduce((sum, phase) => sum + phase.skills.length + phase.goals.length, 0)) *
+      100
+  );
+  const resumePercent = Math.round(
+    (resumeItems.filter((item) => state.resume[item]).length / resumeItems.length) * 100
+  );
+  const projectPercent = Math.round(
+    (state.projects.filter((project) => project.status === "Done").length /
+      Math.max(1, state.projects.length)) *
+      100
+  );
+  const dsaTotal = state.solved.easy + state.solved.medium + state.solved.hard;
+  const dsaPercent = Math.round((dsaTotal / 300) * 100);
+  const readiness = Math.round(
+    roadmapPercent * 0.28 + habitPercent * 0.18 + dsaPercent * 0.22 + projectPercent * 0.18 + resumePercent * 0.14
+  );
+  const xp = completedHabits * 20 + dsaTotal * 8 + state.projects.filter((p) => p.status === "Done").length * 350;
+  const quote = quotes[new Date().getDay() % quotes.length];
+
+  const topicData = [
+    { topic: "Arrays", solved: state.solved.arrays, goal: 70 },
+    { topic: "Strings", solved: state.solved.strings, goal: 50 },
+    { topic: "Trees", solved: state.solved.trees, goal: 45 },
+    { topic: "Graphs", solved: state.solved.graphs, goal: 35 },
+    { topic: "DP", solved: state.solved.dp, goal: 40 }
+  ];
+  const difficultyData = [
+    { name: "Easy", value: state.solved.easy, color: "#67e8f9" },
+    { name: "Medium", value: state.solved.medium, color: "#86efac" },
+    { name: "Hard", value: state.solved.hard, color: "#f0abfc" }
+  ];
+  const analyticsData = [
+    { month: "Jan", readiness: 12 },
+    { month: "Mar", readiness: 24 },
+    { month: "May", readiness: Math.max(35, readiness - 18) },
+    { month: "Jul", readiness: Math.max(45, readiness - 8) },
+    { month: "Now", readiness }
+  ];
+
+  function toggleHabit(day: string, habit: string) {
+    const key = `${day}:${habit}`;
+    setState((current) => ({
+      ...current,
+      habits: { ...current.habits, [key]: !current.habits[key] }
+    }));
+  }
+
+  function toggleRoadmap(id: string) {
+    setState((current) => ({
+      ...current,
+      roadmap: { ...current.roadmap, [id]: !current.roadmap[id] }
+    }));
+  }
+
+  function toggleResume(item: string) {
+    setState((current) => ({
+      ...current,
+      resume: { ...current.resume, [item]: !current.resume[item] }
+    }));
+  }
+
+  function addProject(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!projectDraft.title.trim()) {
+      return;
+    }
+
+    setState((current) => ({
+      ...current,
+      projects: [{ id: crypto.randomUUID(), ...projectDraft }, ...current.projects]
+    }));
+    setProjectDraft({ title: "", stack: "", github: "", deployment: "", status: "Planning" });
+  }
+
+  function cycleProjectStatus(projectId: string) {
+    const order: Project["status"][] = ["Planning", "Building", "Done"];
+    setState((current) => ({
+      ...current,
+      projects: current.projects.map((project) => {
+        if (project.id !== projectId) return project;
+        return { ...project, status: order[(order.indexOf(project.status) + 1) % order.length] };
+      })
+    }));
+  }
+
+  return (
+    <main className="glass-grid min-h-screen">
+      <Sidebar mobileOpen={mobileNavOpen} onClose={() => setMobileNavOpen(false)} />
+
+      <div className="lg:pl-72">
+        <header className="sticky top-0 z-30 border-b border-white/10 bg-slate-950/70 px-4 py-3 backdrop-blur-xl lg:hidden">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 font-semibold">
+              <Sparkles className="h-5 w-5 text-cyan-300" />
+              Internship OS
+            </div>
+            <Button variant="ghost" size="icon" onClick={() => setMobileNavOpen(true)} aria-label="Open navigation">
+              <Menu className="h-5 w-5" />
+            </Button>
+          </div>
+        </header>
+
+        <section id="overview" className="px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+          <Hero readiness={readiness} xp={xp} streak={streak} quote={quote} />
+          <DashboardCards readiness={readiness} dsaTotal={dsaTotal} projectPercent={projectPercent} />
+
+          <div className="mt-6 grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
+            <Card>
+              <CardHeader>
+                <CardTitle>Progress analytics</CardTitle>
+                <CardDescription>Readiness trend based on roadmap, DSA, habits, projects, and career prep.</CardDescription>
+              </CardHeader>
+              <CardContent className="h-72">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={analyticsData}>
+                    <defs>
+                      <linearGradient id="readiness" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#67e8f9" stopOpacity={0.45} />
+                        <stop offset="95%" stopColor="#67e8f9" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid stroke="rgba(255,255,255,0.08)" vertical={false} />
+                    <XAxis dataKey="month" stroke="#94a3b8" />
+                    <YAxis stroke="#94a3b8" />
+                    <Tooltip contentStyle={tooltipStyle} />
+                    <Area type="monotone" dataKey="readiness" stroke="#67e8f9" fill="url(#readiness)" strokeWidth={3} />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>GitHub-style heatmap</CardTitle>
+                <CardDescription>Daily habit intensity across the last 8 weeks.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-8 gap-2">
+                  {days.map((day) => {
+                    const count = habits.filter((habit) => state.habits[`${day.key}:${habit}`]).length;
+                    return (
+                      <div
+                        key={day.key}
+                        title={`${day.label}: ${count} habits`}
+                        className={cn(
+                          "aspect-square rounded-md border border-white/10 bg-white/5",
+                          count === 1 && "bg-cyan-300/20",
+                          count === 2 && "bg-cyan-300/35",
+                          count === 3 && "bg-emerald-300/45",
+                          count >= 4 && "bg-fuchsia-300/55"
+                        )}
+                      />
+                    );
+                  })}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </section>
+
+        <section id="roadmap" className="px-4 py-6 sm:px-6 lg:px-8">
+          <SectionHeading eyebrow="1-year roadmap" title="Phase-by-phase internship readiness plan" />
+          <div className="grid gap-5 xl:grid-cols-2">
+            {phases.map((phase, index) => {
+              const items = [...phase.skills, ...phase.goals];
+              const done = items.filter((item) => state.roadmap[`${phase.id}:${item}`]).length;
+              const percent = Math.round((done / items.length) * 100);
+
+              return (
+                <motion.div
+                  key={phase.id}
+                  initial={{ opacity: 0, y: 18 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true }}
+                  transition={{ delay: index * 0.04 }}
+                >
+                  <Card>
+                    <CardHeader>
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div>
+                          <CardTitle>{phase.title}</CardTitle>
+                          <CardDescription>{phase.weeks}</CardDescription>
+                        </div>
+                        <Badge>{percent}% complete</Badge>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="space-y-5">
+                      <Progress value={percent} />
+                      <div>
+                        <p className="mb-3 text-xs font-semibold uppercase tracking-[0.2em] text-cyan-200/80">Skills</p>
+                        <div className="grid gap-2 sm:grid-cols-2">
+                          {phase.skills.map((skill) => (
+                            <ChecklistRow
+                              key={skill}
+                              checked={Boolean(state.roadmap[`${phase.id}:${skill}`])}
+                              label={skill}
+                              onChange={() => toggleRoadmap(`${phase.id}:${skill}`)}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                      <div>
+                        <p className="mb-3 text-xs font-semibold uppercase tracking-[0.2em] text-fuchsia-200/80">Weekly goals</p>
+                        <div className="grid gap-2">
+                          {phase.goals.map((goal) => (
+                            <ChecklistRow
+                              key={goal}
+                              checked={Boolean(state.roadmap[`${phase.id}:${goal}`])}
+                              label={goal}
+                              onChange={() => toggleRoadmap(`${phase.id}:${goal}`)}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </motion.div>
+              );
+            })}
+          </div>
+        </section>
+
+        <section id="habits" className="px-4 py-6 sm:px-6 lg:px-8">
+          <SectionHeading eyebrow="Habit tracker" title="Daily execution board" />
+          <div className="grid gap-6 xl:grid-cols-[0.75fr_1.25fr]">
+            <Card>
+              <CardHeader>
+                <CardTitle>Weekly streaks</CardTitle>
+                <CardDescription>Keep the chain alive with focused daily reps.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-5">
+                <MetricLine icon={Flame} label="Current streak" value={`${streak} days`} />
+                <MetricLine icon={CheckCircle2} label="Completion" value={`${habitPercent}%`} />
+                <Progress value={habitPercent} />
+                <div className="rounded-2xl border border-white/10 bg-slate-950/50 p-4">
+                  <p className="text-sm text-slate-300">{quote}</p>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Calendar layout</CardTitle>
+                <CardDescription>Track code, DSA, projects, reading, and applications for the last 8 weeks.</CardDescription>
+              </CardHeader>
+              <CardContent className="overflow-x-auto">
+                <div className="min-w-[760px]">
+                  <div className="grid grid-cols-[96px_repeat(56,1fr)] gap-1 text-xs text-slate-500">
+                    <div />
+                    {days.map((day) => (
+                      <div key={day.key} className="text-center">{day.short}</div>
+                    ))}
+                  </div>
+                  <div className="mt-2 space-y-2">
+                    {habits.map((habit) => (
+                      <div key={habit} className="grid grid-cols-[96px_repeat(56,1fr)] items-center gap-1">
+                        <div className="text-sm text-slate-300">{habit}</div>
+                        {days.map((day) => (
+                          <Checkbox
+                            key={`${day.key}:${habit}`}
+                            aria-label={`${habit} on ${day.label}`}
+                            className="h-5 w-full rounded-md"
+                            checked={Boolean(state.habits[`${day.key}:${habit}`])}
+                            onCheckedChange={() => toggleHabit(day.key, habit)}
+                          />
+                        ))}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </section>
+
+        <section id="dsa" className="px-4 py-6 sm:px-6 lg:px-8">
+          <SectionHeading eyebrow="DSA tracker" title="LeetCode topic and difficulty progress" />
+          <div className="grid gap-6 xl:grid-cols-[1fr_0.85fr]">
+            <Card>
+              <CardHeader>
+                <CardTitle>Topic-wise progress</CardTitle>
+                <CardDescription>Target: 300 curated problems before internship season.</CardDescription>
+              </CardHeader>
+              <CardContent className="h-80">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={topicData}>
+                    <CartesianGrid stroke="rgba(255,255,255,0.08)" vertical={false} />
+                    <XAxis dataKey="topic" stroke="#94a3b8" />
+                    <YAxis stroke="#94a3b8" />
+                    <Tooltip contentStyle={tooltipStyle} />
+                    <Bar dataKey="solved" radius={[10, 10, 0, 0]} fill="#67e8f9" />
+                    <Bar dataKey="goal" radius={[10, 10, 0, 0]} fill="rgba(255,255,255,0.12)" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Difficulty breakdown</CardTitle>
+                <CardDescription>{dsaTotal} solved problems logged.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="h-60">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie data={difficultyData} innerRadius={60} outerRadius={92} paddingAngle={4} dataKey="value">
+                        {difficultyData.map((entry) => (
+                          <Cell key={entry.name} fill={entry.color} />
+                        ))}
+                      </Pie>
+                      <Tooltip contentStyle={tooltipStyle} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+                <div className="grid grid-cols-3 gap-3">
+                  {difficultyData.map((item) => (
+                    <div key={item.name} className="rounded-xl border border-white/10 bg-white/5 p-3 text-center">
+                      <div className="text-lg font-semibold">{item.value}</div>
+                      <div className="text-xs text-slate-400">{item.name}</div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </section>
+
+        <section id="projects" className="px-4 py-6 sm:px-6 lg:px-8">
+          <SectionHeading eyebrow="Project tracker" title="Portfolio-quality full-stack builds" />
+          <div className="grid gap-6 xl:grid-cols-[0.8fr_1.2fr]">
+            <Card>
+              <CardHeader>
+                <CardTitle>Add project</CardTitle>
+                <CardDescription>Track GitHub, deployment, stack, and completion.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <form className="space-y-3" onSubmit={addProject}>
+                  <Input placeholder="Project title" value={projectDraft.title} onChange={(event) => setProjectDraft({ ...projectDraft, title: event.target.value })} />
+                  <Input placeholder="Tech stack" value={projectDraft.stack} onChange={(event) => setProjectDraft({ ...projectDraft, stack: event.target.value })} />
+                  <Input placeholder="GitHub link" value={projectDraft.github} onChange={(event) => setProjectDraft({ ...projectDraft, github: event.target.value })} />
+                  <Input placeholder="Deployment link" value={projectDraft.deployment} onChange={(event) => setProjectDraft({ ...projectDraft, deployment: event.target.value })} />
+                  <select
+                    className="h-11 w-full rounded-xl border border-white/10 bg-slate-950/60 px-3 text-sm text-white outline-none"
+                    value={projectDraft.status}
+                    onChange={(event) => setProjectDraft({ ...projectDraft, status: event.target.value as Project["status"] })}
+                  >
+                    <option>Planning</option>
+                    <option>Building</option>
+                    <option>Done</option>
+                  </select>
+                  <Button className="w-full" type="submit">
+                    <Plus className="h-4 w-4" />
+                    Add project
+                  </Button>
+                </form>
+              </CardContent>
+            </Card>
+
+            <div className="grid gap-4">
+              {state.projects.map((project) => (
+                <Card key={project.id}>
+                  <CardContent className="p-5">
+                    <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                      <div>
+                        <h3 className="text-lg font-semibold">{project.title}</h3>
+                        <p className="mt-1 text-sm text-slate-400">{project.stack}</p>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          {project.github ? <Badge><Github className="mr-1 h-3 w-3" /> GitHub</Badge> : null}
+                          {project.deployment ? <Badge><LinkIcon className="mr-1 h-3 w-3" /> Live</Badge> : null}
+                        </div>
+                      </div>
+                      <Button variant="secondary" size="sm" onClick={() => cycleProjectStatus(project.id)}>
+                        {project.status}
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        <section id="career" className="px-4 py-6 pb-12 sm:px-6 lg:px-8">
+          <SectionHeading eyebrow="Resume + internships" title="Application command center" />
+          <div className="grid gap-6 xl:grid-cols-3">
+            <Card>
+              <CardHeader>
+                <CardTitle>Resume checklist</CardTitle>
+                <CardDescription>{resumePercent}% ready for applications.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                {resumeItems.map((item) => (
+                  <ChecklistRow key={item} checked={Boolean(state.resume[item])} label={item} onChange={() => toggleResume(item)} />
+                ))}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Internship applications</CardTitle>
+                <CardDescription>Pipeline from wishlist to offer.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {state.applications.map((application) => (
+                  <div key={application.id} className="rounded-xl border border-white/10 bg-white/5 p-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <p className="font-medium">{application.company}</p>
+                        <p className="text-sm text-slate-400">{application.role}</p>
+                      </div>
+                      <Badge>{application.status}</Badge>
+                    </div>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Mock interviews</CardTitle>
+                <CardDescription>Target 12 technical and behavioral mocks.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <MetricLine icon={Trophy} label="Mocks done" value="5 / 12" />
+                <Progress value={42} />
+                <MetricLine icon={Target} label="Company wishlist" value="24 saved" />
+                <MetricLine icon={Activity} label="Next focus" value="Graphs + APIs" />
+              </CardContent>
+            </Card>
+          </div>
+        </section>
+      </div>
+    </main>
+  );
+}
+
+function Sidebar({ mobileOpen, onClose }: { mobileOpen: boolean; onClose: () => void }) {
+  return (
+    <>
+      <aside className="fixed inset-y-0 left-0 z-40 hidden w-72 border-r border-white/10 bg-slate-950/70 p-5 backdrop-blur-2xl lg:block">
+        <SidebarContent />
+      </aside>
+      {mobileOpen ? (
+        <div className="fixed inset-0 z-50 bg-black/70 lg:hidden">
+          <aside className="h-full w-80 max-w-[86vw] border-r border-white/10 bg-slate-950 p-5">
+            <div className="mb-5 flex items-center justify-between">
+              <span className="font-semibold">Navigation</span>
+              <Button variant="ghost" size="icon" onClick={onClose} aria-label="Close navigation">
+                <X className="h-5 w-5" />
+              </Button>
+            </div>
+            <SidebarContent onNavigate={onClose} />
+          </aside>
+        </div>
+      ) : null}
+    </>
+  );
+}
+
+function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
+  return (
+    <div className="flex h-full flex-col">
+      <div className="mb-8 flex items-center gap-3">
+        <div className="grid h-11 w-11 place-items-center rounded-2xl bg-cyan-300 text-slate-950 shadow-[0_0_30px_rgba(103,232,249,0.35)]">
+          <GraduationCap className="h-5 w-5" />
+        </div>
+        <div>
+          <div className="font-semibold">Internship OS</div>
+          <div className="text-xs text-slate-500">Full-stack roadmap</div>
+        </div>
+      </div>
+      <nav className="space-y-2">
+        {navItems.map(([href, label, Icon]) => (
+          <a
+            key={href}
+            href={`#${href}`}
+            onClick={onNavigate}
+            className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-slate-300 transition hover:bg-white/8 hover:text-white"
+          >
+            <Icon className="h-4 w-4 text-cyan-200" />
+            {label}
+          </a>
+        ))}
+      </nav>
+      <div className="mt-auto rounded-2xl border border-cyan-300/20 bg-cyan-300/10 p-4">
+        <p className="text-sm font-medium text-cyan-100">Today&apos;s rule</p>
+        <p className="mt-2 text-sm text-slate-300">One solved problem, one useful commit, one honest review.</p>
+      </div>
+    </div>
+  );
+}
+
+function Hero({ readiness, xp, streak, quote }: { readiness: number; xp: number; streak: number; quote: string }) {
+  return (
+    <div className="relative overflow-hidden rounded-[2rem] border border-white/10 bg-white/[0.06] p-6 shadow-2xl shadow-black/30 backdrop-blur-xl sm:p-8 lg:p-10">
+      <div className="absolute inset-0 bg-[linear-gradient(135deg,rgba(103,232,249,0.18),transparent_35%,rgba(240,171,252,0.18))]" />
+      <div className="relative grid gap-8 xl:grid-cols-[1.25fr_0.75fr] xl:items-center">
+        <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.55 }}>
+          <Badge className="mb-5 border-cyan-300/25 bg-cyan-300/10 text-cyan-100">
+            <Sparkles className="mr-1 h-3 w-3" />
+            Premium student productivity dashboard
+          </Badge>
+          <h1 className="max-w-4xl text-4xl font-semibold tracking-tight text-white sm:text-6xl lg:text-7xl">
+            Full Stack Internship Tracker
+          </h1>
+          <p className="mt-5 max-w-2xl text-base leading-7 text-slate-300 sm:text-lg">
+            A 1-year command center to build strong fundamentals, ship portfolio projects, solve DSA consistently, and become internship-ready with measurable progress.
+          </p>
+          <div className="mt-7 flex flex-wrap gap-3">
+            <Button asChild>
+              <a href="#roadmap">Start roadmap</a>
+            </Button>
+            <Button variant="secondary" asChild>
+              <a href="#projects">Add project</a>
+            </Button>
+          </div>
+        </motion.div>
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.6, delay: 0.1 }}
+          className="rounded-3xl border border-white/10 bg-slate-950/50 p-5"
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-slate-400">Internship readiness</span>
+            <span className="font-mono text-3xl font-semibold text-cyan-200">{readiness}%</span>
+          </div>
+          <Progress value={readiness} className="mt-4 h-3" />
+          <div className="mt-5 grid grid-cols-2 gap-3">
+            <MiniStat label="XP earned" value={xp.toLocaleString()} />
+            <MiniStat label="Streak" value={`${streak}d`} />
+          </div>
+          <p className="mt-5 rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-slate-300">{quote}</p>
+        </motion.div>
+      </div>
+    </div>
+  );
+}
+
+function DashboardCards({ readiness, dsaTotal, projectPercent }: { readiness: number; dsaTotal: number; projectPercent: number }) {
+  const cards = [
+    { label: "Target CGPA", value: "8.5+", icon: GraduationCap, helper: "Academic baseline" },
+    { label: "LeetCode Goal", value: `${dsaTotal}/300`, icon: Code2, helper: "Problems solved" },
+    { label: "Projects Goal", value: `${projectPercent}%`, icon: Github, helper: "Portfolio completion" },
+    { label: "Daily Study Hours", value: "4h", icon: CalendarCheck, helper: "Focused execution" },
+    { label: "Readiness", value: `${readiness}%`, icon: Target, helper: "Composite score" }
+  ];
+
+  return (
+    <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+      {cards.map((card, index) => (
+        <motion.div
+          key={card.label}
+          initial={{ opacity: 0, y: 14 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.05 * index }}
+        >
+          <Card>
+            <CardContent className="p-5">
+              <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-xl bg-white/8 text-cyan-200">
+                <card.icon className="h-5 w-5" />
+              </div>
+              <div className="font-mono text-2xl font-semibold">{card.value}</div>
+              <div className="mt-1 text-sm font-medium text-slate-200">{card.label}</div>
+              <div className="text-xs text-slate-500">{card.helper}</div>
+            </CardContent>
+          </Card>
+        </motion.div>
+      ))}
+    </div>
+  );
+}
+
+function SectionHeading({ eyebrow, title }: { eyebrow: string; title: string }) {
+  return (
+    <div className="mb-5">
+      <p className="text-xs font-semibold uppercase tracking-[0.28em] text-cyan-200/80">{eyebrow}</p>
+      <h2 className="mt-2 text-2xl font-semibold tracking-tight sm:text-3xl">{title}</h2>
+    </div>
+  );
+}
+
+function ChecklistRow({ checked, label, onChange }: { checked: boolean; label: string; onChange: () => void }) {
+  return (
+    <div className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/5 p-3">
+      <Checkbox checked={checked} onCheckedChange={onChange} aria-label={label} />
+      <span className={cn("text-sm text-slate-300", checked && "text-white line-through decoration-cyan-200/60")}>{label}</span>
+    </div>
+  );
+}
+
+function MetricLine({ icon: Icon, label, value }: { icon: typeof Flame; label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/5 p-3">
+      <div className="flex items-center gap-3 text-sm text-slate-300">
+        <Icon className="h-4 w-4 text-cyan-200" />
+        {label}
+      </div>
+      <div className="font-mono text-sm font-semibold text-white">{value}</div>
+    </div>
+  );
+}
+
+function MiniStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+      <div className="font-mono text-xl font-semibold">{value}</div>
+      <div className="text-xs text-slate-500">{label}</div>
+    </div>
+  );
+}
+
+function buildDays() {
+  return Array.from({ length: 56 }, (_, index) => {
+    const date = new Date();
+    date.setDate(date.getDate() - (55 - index));
+    return {
+      key: date.toISOString().slice(0, 10),
+      short: String(date.getDate()),
+      label: date.toLocaleDateString(undefined, { month: "short", day: "numeric" })
+    };
+  });
+}
+
+function calculateStreak(days: ReturnType<typeof buildDays>, habitState: Record<string, boolean>) {
+  let streak = 0;
+  for (let index = days.length - 1; index >= 0; index -= 1) {
+    const completedToday = habits.some((habit) => habitState[`${days[index].key}:${habit}`]);
+    if (!completedToday) {
+      break;
+    }
+    streak += 1;
+  }
+  return streak;
+}
+
+const tooltipStyle = {
+  background: "rgba(2, 6, 23, 0.94)",
+  border: "1px solid rgba(255,255,255,0.12)",
+  borderRadius: "14px",
+  color: "#f8fafc"
+};
