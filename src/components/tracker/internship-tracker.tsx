@@ -62,7 +62,24 @@ type Application = {
   status: "Wishlist" | "Applied" | "Interview" | "Offer";
 };
 
+type TopicKey = "arrays" | "strings" | "dp" | "graphs" | "trees";
+type DifficultyKey = "easy" | "medium" | "hard";
+
+type Profile = {
+  targetCgpa: number;
+  currentCgpa: number;
+  completedSemesters: number;
+  totalSemesters: number;
+  leetcodeGoal: number;
+  projectsGoal: number;
+  dailyStudyHours: number;
+  mockTarget: number;
+  mocksDone: number;
+  companyWishlist: number;
+};
+
 type TrackerState = {
+  profile: Profile;
   habits: Record<string, boolean>;
   roadmap: Record<string, boolean>;
   resume: Record<string, boolean>;
@@ -139,9 +156,21 @@ const quotes = [
 ];
 
 const initialState: TrackerState = {
+  profile: {
+    targetCgpa: 8.5,
+    currentCgpa: 0,
+    completedSemesters: 0,
+    totalSemesters: 8,
+    leetcodeGoal: 300,
+    projectsGoal: 4,
+    dailyStudyHours: 4,
+    mockTarget: 12,
+    mocksDone: 0,
+    companyWishlist: 0
+  },
   habits: {},
   roadmap: {},
-  resume: { "One-page resume": true, "Portfolio live": true },
+  resume: {},
   solved: {
     arrays: 0,
     strings: 0,
@@ -159,6 +188,10 @@ const initialState: TrackerState = {
 export function InternshipTracker() {
   const [state, setState] = useState<TrackerState>(initialState);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [dsaDraft, setDsaDraft] = useState({
+    topic: "arrays" as TopicKey,
+    difficulty: "easy" as DifficultyKey
+  });
   const [projectDraft, setProjectDraft] = useState({
     title: "",
     stack: "",
@@ -166,11 +199,22 @@ export function InternshipTracker() {
     deployment: "",
     status: "Planning" as Project["status"]
   });
+  const [applicationDraft, setApplicationDraft] = useState({
+    company: "",
+    role: "",
+    status: "Wishlist" as Application["status"]
+  });
 
   useEffect(() => {
     const stored = window.localStorage.getItem(STORAGE_KEY);
     if (stored) {
-      setState({ ...initialState, ...JSON.parse(stored) });
+      const parsed = JSON.parse(stored) as Partial<TrackerState>;
+      setState({
+        ...initialState,
+        ...parsed,
+        profile: { ...initialState.profile, ...parsed.profile },
+        solved: { ...initialState.solved, ...parsed.solved }
+      });
     }
   }, []);
 
@@ -193,23 +237,26 @@ export function InternshipTracker() {
   );
   const projectPercent = Math.round(
     (state.projects.filter((project) => project.status === "Done").length /
-      Math.max(1, state.projects.length)) *
+      Math.max(1, state.profile.projectsGoal)) *
       100
   );
   const dsaTotal = state.solved.easy + state.solved.medium + state.solved.hard;
-  const dsaPercent = Math.round((dsaTotal / 300) * 100);
+  const dsaPercent = Math.round((dsaTotal / Math.max(1, state.profile.leetcodeGoal)) * 100);
   const readiness = Math.round(
     roadmapPercent * 0.28 + habitPercent * 0.18 + dsaPercent * 0.22 + projectPercent * 0.18 + resumePercent * 0.14
   );
+  const cgpaGap = Math.max(0, state.profile.targetCgpa - state.profile.currentCgpa);
+  const remainingSemesters = Math.max(0, state.profile.totalSemesters - state.profile.completedSemesters);
+  const requiredCgpa = calculateRequiredCgpa(state.profile);
   const xp = completedHabits * 20 + dsaTotal * 8 + state.projects.filter((p) => p.status === "Done").length * 350;
   const quote = quotes[new Date().getDay() % quotes.length];
 
   const topicData = [
-    { topic: "Arrays", solved: state.solved.arrays, goal: 70 },
-    { topic: "Strings", solved: state.solved.strings, goal: 50 },
-    { topic: "Trees", solved: state.solved.trees, goal: 45 },
-    { topic: "Graphs", solved: state.solved.graphs, goal: 35 },
-    { topic: "DP", solved: state.solved.dp, goal: 40 }
+    { topic: "Arrays", solved: state.solved.arrays, goal: Math.ceil(state.profile.leetcodeGoal * 0.24) },
+    { topic: "Strings", solved: state.solved.strings, goal: Math.ceil(state.profile.leetcodeGoal * 0.17) },
+    { topic: "Trees", solved: state.solved.trees, goal: Math.ceil(state.profile.leetcodeGoal * 0.15) },
+    { topic: "Graphs", solved: state.solved.graphs, goal: Math.ceil(state.profile.leetcodeGoal * 0.12) },
+    { topic: "DP", solved: state.solved.dp, goal: Math.ceil(state.profile.leetcodeGoal * 0.14) }
   ];
   const difficultyData = [
     { name: "Easy", value: state.solved.easy, color: "#67e8f9" },
@@ -246,6 +293,32 @@ export function InternshipTracker() {
     }));
   }
 
+  function updateProfile<K extends keyof Profile>(key: K, value: Profile[K]) {
+    setState((current) => ({
+      ...current,
+      profile: { ...current.profile, [key]: value }
+    }));
+  }
+
+  function addDsaProblem(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setState((current) => ({
+      ...current,
+      solved: {
+        ...current.solved,
+        [dsaDraft.topic]: current.solved[dsaDraft.topic] + 1,
+        [dsaDraft.difficulty]: current.solved[dsaDraft.difficulty] + 1
+      }
+    }));
+  }
+
+  function updateSolved(key: keyof TrackerState["solved"], value: number) {
+    setState((current) => ({
+      ...current,
+      solved: { ...current.solved, [key]: Math.max(0, value) }
+    }));
+  }
+
   function addProject(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!projectDraft.title.trim()) {
@@ -266,6 +339,30 @@ export function InternshipTracker() {
       projects: current.projects.map((project) => {
         if (project.id !== projectId) return project;
         return { ...project, status: order[(order.indexOf(project.status) + 1) % order.length] };
+      })
+    }));
+  }
+
+  function addApplication(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!applicationDraft.company.trim()) {
+      return;
+    }
+
+    setState((current) => ({
+      ...current,
+      applications: [{ id: crypto.randomUUID(), ...applicationDraft }, ...current.applications]
+    }));
+    setApplicationDraft({ company: "", role: "", status: "Wishlist" });
+  }
+
+  function cycleApplicationStatus(applicationId: string) {
+    const order: Application["status"][] = ["Wishlist", "Applied", "Interview", "Offer"];
+    setState((current) => ({
+      ...current,
+      applications: current.applications.map((application) => {
+        if (application.id !== applicationId) return application;
+        return { ...application, status: order[(order.indexOf(application.status) + 1) % order.length] };
       })
     }));
   }
@@ -304,9 +401,59 @@ export function InternshipTracker() {
             quote={quote}
             onReset={resetForNewUser}
           />
-          <DashboardCards readiness={readiness} dsaTotal={dsaTotal} projectPercent={projectPercent} />
+          <DashboardCards
+            profile={state.profile}
+            readiness={readiness}
+            dsaTotal={dsaTotal}
+            projectPercent={projectPercent}
+          />
 
-          <div className="mt-6 grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
+          <div className="mt-6 grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
+            <Card>
+              <CardHeader>
+                <CardTitle>CGPA goal achiever</CardTitle>
+                <CardDescription>Maintain your academic target alongside internship prep.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-5">
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <LabeledNumber
+                    label="Current CGPA"
+                    value={state.profile.currentCgpa}
+                    step={0.01}
+                    max={10}
+                    onChange={(value) => updateProfile("currentCgpa", value)}
+                  />
+                  <LabeledNumber
+                    label="Target CGPA"
+                    value={state.profile.targetCgpa}
+                    step={0.01}
+                    max={10}
+                    onChange={(value) => updateProfile("targetCgpa", value)}
+                  />
+                  <LabeledNumber
+                    label="Completed semesters"
+                    value={state.profile.completedSemesters}
+                    step={1}
+                    max={state.profile.totalSemesters}
+                    onChange={(value) => updateProfile("completedSemesters", Math.round(value))}
+                  />
+                  <LabeledNumber
+                    label="Total semesters"
+                    value={state.profile.totalSemesters}
+                    step={1}
+                    max={12}
+                    onChange={(value) => updateProfile("totalSemesters", Math.max(1, Math.round(value)))}
+                  />
+                </div>
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <MiniStat label="Gap to target" value={cgpaGap.toFixed(2)} />
+                  <MiniStat label="Semesters left" value={String(remainingSemesters)} />
+                  <MiniStat label="Needed avg" value={requiredCgpa === null ? "Set data" : requiredCgpa.toFixed(2)} />
+                </div>
+                <Progress value={Math.round((state.profile.currentCgpa / Math.max(1, state.profile.targetCgpa)) * 100)} />
+              </CardContent>
+            </Card>
+
             <Card>
               <CardHeader>
                 <CardTitle>Progress analytics</CardTitle>
@@ -330,7 +477,9 @@ export function InternshipTracker() {
                 </ResponsiveContainer>
               </CardContent>
             </Card>
+          </div>
 
+          <div className="mt-6 grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
             <Card>
               <CardHeader>
                 <CardTitle>GitHub-style heatmap</CardTitle>
@@ -480,8 +629,82 @@ export function InternshipTracker() {
           <div className="grid gap-6 xl:grid-cols-[1fr_0.85fr]">
             <Card>
               <CardHeader>
+                <CardTitle>Add completed problem</CardTitle>
+                <CardDescription>Log each solved problem by topic and difficulty.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <form className="grid gap-3 sm:grid-cols-[1fr_1fr_auto]" onSubmit={addDsaProblem}>
+                  <select
+                    className="h-11 rounded-xl border border-white/10 bg-slate-950/60 px-3 text-sm text-white outline-none"
+                    value={dsaDraft.topic}
+                    onChange={(event) => setDsaDraft({ ...dsaDraft, topic: event.target.value as TopicKey })}
+                  >
+                    <option value="arrays">Arrays</option>
+                    <option value="strings">Strings</option>
+                    <option value="trees">Trees</option>
+                    <option value="graphs">Graphs</option>
+                    <option value="dp">Dynamic Programming</option>
+                  </select>
+                  <select
+                    className="h-11 rounded-xl border border-white/10 bg-slate-950/60 px-3 text-sm text-white outline-none"
+                    value={dsaDraft.difficulty}
+                    onChange={(event) => setDsaDraft({ ...dsaDraft, difficulty: event.target.value as DifficultyKey })}
+                  >
+                    <option value="easy">Easy</option>
+                    <option value="medium">Medium</option>
+                    <option value="hard">Hard</option>
+                  </select>
+                  <Button type="submit">
+                    <Plus className="h-4 w-4" />
+                    Add
+                  </Button>
+                </form>
+                <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                  <LabeledNumber
+                    label="LeetCode goal"
+                    value={state.profile.leetcodeGoal}
+                    step={10}
+                    max={1000}
+                    onChange={(value) => updateProfile("leetcodeGoal", Math.round(value))}
+                  />
+                  <LabeledNumber
+                    label="Daily study hours"
+                    value={state.profile.dailyStudyHours}
+                    step={0.5}
+                    max={16}
+                    onChange={(value) => updateProfile("dailyStudyHours", value)}
+                  />
+                  <div className="rounded-xl border border-white/10 bg-white/5 p-3">
+                    <div className="text-xs text-slate-400">Total solved</div>
+                    <div className="mt-2 font-mono text-2xl font-semibold">{dsaTotal}</div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Manual DSA totals</CardTitle>
+                <CardDescription>Adjust counts if you already solved problems elsewhere.</CardDescription>
+              </CardHeader>
+              <CardContent className="grid gap-3 sm:grid-cols-2">
+                {(["arrays", "strings", "trees", "graphs", "dp", "easy", "medium", "hard"] as const).map((key) => (
+                  <LabeledNumber
+                    key={key}
+                    label={labelize(key)}
+                    value={state.solved[key]}
+                    step={1}
+                    max={1000}
+                    onChange={(value) => updateSolved(key, Math.round(value))}
+                  />
+                ))}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
                 <CardTitle>Topic-wise progress</CardTitle>
-                <CardDescription>Target: 300 curated problems before internship season.</CardDescription>
+                <CardDescription>Target: {state.profile.leetcodeGoal} curated problems before internship season.</CardDescription>
               </CardHeader>
               <CardContent className="h-80">
                 <ResponsiveContainer width="100%" height="100%">
@@ -538,6 +761,13 @@ export function InternshipTracker() {
               </CardHeader>
               <CardContent>
                 <form className="space-y-3" onSubmit={addProject}>
+                  <LabeledNumber
+                    label="Portfolio project goal"
+                    value={state.profile.projectsGoal}
+                    step={1}
+                    max={20}
+                    onChange={(value) => updateProfile("projectsGoal", Math.max(1, Math.round(value)))}
+                  />
                   <Input placeholder="Project title" value={projectDraft.title} onChange={(event) => setProjectDraft({ ...projectDraft, title: event.target.value })} />
                   <Input placeholder="Tech stack" value={projectDraft.stack} onChange={(event) => setProjectDraft({ ...projectDraft, stack: event.target.value })} />
                   <Input placeholder="GitHub link" value={projectDraft.github} onChange={(event) => setProjectDraft({ ...projectDraft, github: event.target.value })} />
@@ -560,6 +790,13 @@ export function InternshipTracker() {
             </Card>
 
             <div className="grid gap-4">
+              {state.projects.length === 0 ? (
+                <Card>
+                  <CardContent className="p-5 text-sm text-slate-400">
+                    No projects yet. Add your first portfolio project to start tracking completion.
+                  </CardContent>
+                </Card>
+              ) : null}
               {state.projects.map((project) => (
                 <Card key={project.id}>
                   <CardContent className="p-5">
@@ -604,6 +841,37 @@ export function InternshipTracker() {
                 <CardDescription>Pipeline from wishlist to offer.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
+                <form className="space-y-3 rounded-xl border border-white/10 bg-white/5 p-3" onSubmit={addApplication}>
+                  <Input
+                    placeholder="Company"
+                    value={applicationDraft.company}
+                    onChange={(event) => setApplicationDraft({ ...applicationDraft, company: event.target.value })}
+                  />
+                  <Input
+                    placeholder="Role"
+                    value={applicationDraft.role}
+                    onChange={(event) => setApplicationDraft({ ...applicationDraft, role: event.target.value })}
+                  />
+                  <select
+                    className="h-11 w-full rounded-xl border border-white/10 bg-slate-950/60 px-3 text-sm text-white outline-none"
+                    value={applicationDraft.status}
+                    onChange={(event) => setApplicationDraft({ ...applicationDraft, status: event.target.value as Application["status"] })}
+                  >
+                    <option>Wishlist</option>
+                    <option>Applied</option>
+                    <option>Interview</option>
+                    <option>Offer</option>
+                  </select>
+                  <Button className="w-full" type="submit">
+                    <Plus className="h-4 w-4" />
+                    Add company
+                  </Button>
+                </form>
+                {state.applications.length === 0 ? (
+                  <div className="rounded-xl border border-white/10 bg-white/5 p-3 text-sm text-slate-400">
+                    No applications yet. Add companies to build your wishlist and pipeline.
+                  </div>
+                ) : null}
                 {state.applications.map((application) => (
                   <div key={application.id} className="rounded-xl border border-white/10 bg-white/5 p-3">
                     <div className="flex items-center justify-between gap-3">
@@ -611,7 +879,9 @@ export function InternshipTracker() {
                         <p className="font-medium">{application.company}</p>
                         <p className="text-sm text-slate-400">{application.role}</p>
                       </div>
-                      <Badge>{application.status}</Badge>
+                      <Button variant="secondary" size="sm" onClick={() => cycleApplicationStatus(application.id)}>
+                        {application.status}
+                      </Button>
                     </div>
                   </div>
                 ))}
@@ -624,9 +894,32 @@ export function InternshipTracker() {
                 <CardDescription>Target 12 technical and behavioral mocks.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <MetricLine icon={Trophy} label="Mocks done" value="5 / 12" />
-                <Progress value={42} />
-                <MetricLine icon={Target} label="Company wishlist" value="24 saved" />
+                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
+                  <LabeledNumber
+                    label="Mocks done"
+                    value={state.profile.mocksDone}
+                    step={1}
+                    max={100}
+                    onChange={(value) => updateProfile("mocksDone", Math.round(value))}
+                  />
+                  <LabeledNumber
+                    label="Mock target"
+                    value={state.profile.mockTarget}
+                    step={1}
+                    max={100}
+                    onChange={(value) => updateProfile("mockTarget", Math.max(1, Math.round(value)))}
+                  />
+                  <LabeledNumber
+                    label="Company wishlist"
+                    value={state.profile.companyWishlist}
+                    step={1}
+                    max={300}
+                    onChange={(value) => updateProfile("companyWishlist", Math.round(value))}
+                  />
+                </div>
+                <MetricLine icon={Trophy} label="Mocks done" value={`${state.profile.mocksDone} / ${state.profile.mockTarget}`} />
+                <Progress value={Math.round((state.profile.mocksDone / Math.max(1, state.profile.mockTarget)) * 100)} />
+                <MetricLine icon={Target} label="Company wishlist" value={`${state.profile.companyWishlist} saved`} />
                 <MetricLine icon={Activity} label="Next focus" value="Graphs + APIs" />
               </CardContent>
             </Card>
@@ -782,12 +1075,22 @@ function Hero({
   );
 }
 
-function DashboardCards({ readiness, dsaTotal, projectPercent }: { readiness: number; dsaTotal: number; projectPercent: number }) {
+function DashboardCards({
+  profile,
+  readiness,
+  dsaTotal,
+  projectPercent
+}: {
+  profile: Profile;
+  readiness: number;
+  dsaTotal: number;
+  projectPercent: number;
+}) {
   const cards = [
-    { label: "Target CGPA", value: "8.5+", icon: GraduationCap, helper: "Academic baseline" },
-    { label: "LeetCode Goal", value: `${dsaTotal}/300`, icon: Code2, helper: "Problems solved" },
+    { label: "Current CGPA", value: profile.currentCgpa ? profile.currentCgpa.toFixed(2) : "Add it", icon: GraduationCap, helper: `Target ${profile.targetCgpa.toFixed(2)}` },
+    { label: "LeetCode Goal", value: `${dsaTotal}/${profile.leetcodeGoal}`, icon: Code2, helper: "Problems solved" },
     { label: "Projects Goal", value: `${projectPercent}%`, icon: Github, helper: "Portfolio completion" },
-    { label: "Daily Study Hours", value: "4h", icon: CalendarCheck, helper: "Focused execution" },
+    { label: "Daily Study Hours", value: `${profile.dailyStudyHours}h`, icon: CalendarCheck, helper: "Focused execution" },
     { label: "Readiness", value: `${readiness}%`, icon: Target, helper: "Composite score" }
   ];
 
@@ -834,6 +1137,35 @@ function ChecklistRow({ checked, label, onChange }: { checked: boolean; label: s
   );
 }
 
+function LabeledNumber({
+  label,
+  value,
+  step,
+  max,
+  onChange
+}: {
+  label: string;
+  value: number;
+  step: number;
+  max: number;
+  onChange: (value: number) => void;
+}) {
+  return (
+    <label className="block rounded-xl border border-white/10 bg-white/5 p-3">
+      <span className="text-xs font-medium text-slate-400">{label}</span>
+      <Input
+        className="mt-2"
+        type="number"
+        min={0}
+        max={max}
+        step={step}
+        value={value}
+        onChange={(event) => onChange(Number(event.target.value))}
+      />
+    </label>
+  );
+}
+
 function MetricLine({ icon: Icon, label, value }: { icon: typeof Flame; label: string; value: string }) {
   return (
     <div className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/5 p-3">
@@ -877,6 +1209,26 @@ function calculateStreak(days: ReturnType<typeof buildDays>, habitState: Record<
     streak += 1;
   }
   return streak;
+}
+
+function calculateRequiredCgpa(profile: Profile) {
+  if (profile.completedSemesters <= 0 || profile.currentCgpa <= 0) {
+    return null;
+  }
+
+  const remaining = Math.max(0, profile.totalSemesters - profile.completedSemesters);
+  if (remaining === 0) {
+    return profile.currentCgpa;
+  }
+
+  const targetPoints = profile.targetCgpa * profile.totalSemesters;
+  const currentPoints = profile.currentCgpa * profile.completedSemesters;
+  return Math.max(0, (targetPoints - currentPoints) / remaining);
+}
+
+function labelize(value: string) {
+  if (value === "dp") return "Dynamic programming";
+  return value.charAt(0).toUpperCase() + value.slice(1);
 }
 
 const tooltipStyle = {
