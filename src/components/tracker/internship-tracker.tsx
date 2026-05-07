@@ -14,6 +14,7 @@ import {
   Link as LinkIcon,
   Menu,
   Plus,
+  RotateCcw,
   Rocket,
   Sparkles,
   Target,
@@ -142,38 +143,17 @@ const initialState: TrackerState = {
   roadmap: {},
   resume: { "One-page resume": true, "Portfolio live": true },
   solved: {
-    arrays: 42,
-    strings: 28,
-    dp: 14,
-    graphs: 10,
-    trees: 22,
-    easy: 88,
-    medium: 47,
-    hard: 8
+    arrays: 0,
+    strings: 0,
+    dp: 0,
+    graphs: 0,
+    trees: 0,
+    easy: 0,
+    medium: 0,
+    hard: 0
   },
-  projects: [
-    {
-      id: "1",
-      title: "Campus Course Planner",
-      stack: "Next.js, PostgreSQL, Tailwind",
-      github: "https://github.com/student/course-planner",
-      deployment: "https://course-planner.example.com",
-      status: "Done"
-    },
-    {
-      id: "2",
-      title: "AI Interview Notes",
-      stack: "React, Node.js, OpenAI API",
-      github: "",
-      deployment: "",
-      status: "Building"
-    }
-  ],
-  applications: [
-    { id: "1", company: "Stripe", role: "Frontend Intern", status: "Wishlist" },
-    { id: "2", company: "Atlassian", role: "Full Stack Intern", status: "Applied" },
-    { id: "3", company: "Microsoft", role: "SWE Intern", status: "Interview" }
-  ]
+  projects: [],
+  applications: []
 };
 
 export function InternshipTracker() {
@@ -290,9 +270,18 @@ export function InternshipTracker() {
     }));
   }
 
+  function resetForNewUser() {
+    window.localStorage.removeItem(STORAGE_KEY);
+    setState(initialState);
+  }
+
   return (
     <main className="glass-grid min-h-screen">
-      <Sidebar mobileOpen={mobileNavOpen} onClose={() => setMobileNavOpen(false)} />
+      <Sidebar
+        mobileOpen={mobileNavOpen}
+        onClose={() => setMobileNavOpen(false)}
+        onReset={resetForNewUser}
+      />
 
       <div className="lg:pl-72">
         <header className="sticky top-0 z-30 border-b border-white/10 bg-slate-950/70 px-4 py-3 backdrop-blur-xl lg:hidden">
@@ -308,7 +297,13 @@ export function InternshipTracker() {
         </header>
 
         <section id="overview" className="px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
-          <Hero readiness={readiness} xp={xp} streak={streak} quote={quote} />
+          <Hero
+            readiness={readiness}
+            xp={xp}
+            streak={streak}
+            quote={quote}
+            onReset={resetForNewUser}
+          />
           <DashboardCards readiness={readiness} dsaTotal={dsaTotal} projectPercent={projectPercent} />
 
           <div className="mt-6 grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
@@ -642,11 +637,19 @@ export function InternshipTracker() {
   );
 }
 
-function Sidebar({ mobileOpen, onClose }: { mobileOpen: boolean; onClose: () => void }) {
+function Sidebar({
+  mobileOpen,
+  onClose,
+  onReset
+}: {
+  mobileOpen: boolean;
+  onClose: () => void;
+  onReset: () => void;
+}) {
   return (
     <>
       <aside className="fixed inset-y-0 left-0 z-40 hidden w-72 border-r border-white/10 bg-slate-950/70 p-5 backdrop-blur-2xl lg:block">
-        <SidebarContent />
+        <SidebarContent onReset={onReset} />
       </aside>
       {mobileOpen ? (
         <div className="fixed inset-0 z-50 bg-black/70 lg:hidden">
@@ -657,7 +660,7 @@ function Sidebar({ mobileOpen, onClose }: { mobileOpen: boolean; onClose: () => 
                 <X className="h-5 w-5" />
               </Button>
             </div>
-            <SidebarContent onNavigate={onClose} />
+            <SidebarContent onNavigate={onClose} onReset={onReset} />
           </aside>
         </div>
       ) : null}
@@ -665,7 +668,13 @@ function Sidebar({ mobileOpen, onClose }: { mobileOpen: boolean; onClose: () => 
   );
 }
 
-function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
+function SidebarContent({
+  onNavigate,
+  onReset
+}: {
+  onNavigate?: () => void;
+  onReset: () => void;
+}) {
   return (
     <div className="flex h-full flex-col">
       <div className="mb-8 flex items-center gap-3">
@@ -693,12 +702,36 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
       <div className="mt-auto rounded-2xl border border-cyan-300/20 bg-cyan-300/10 p-4">
         <p className="text-sm font-medium text-cyan-100">Today&apos;s rule</p>
         <p className="mt-2 text-sm text-slate-300">One solved problem, one useful commit, one honest review.</p>
+        <Button
+          variant="outline"
+          size="sm"
+          className="mt-4 w-full"
+          onClick={() => {
+            onReset();
+            onNavigate?.();
+          }}
+        >
+          <RotateCcw className="h-4 w-4" />
+          New user
+        </Button>
       </div>
     </div>
   );
 }
 
-function Hero({ readiness, xp, streak, quote }: { readiness: number; xp: number; streak: number; quote: string }) {
+function Hero({
+  readiness,
+  xp,
+  streak,
+  quote,
+  onReset
+}: {
+  readiness: number;
+  xp: number;
+  streak: number;
+  quote: string;
+  onReset: () => void;
+}) {
   return (
     <div className="relative overflow-hidden rounded-[2rem] border border-white/10 bg-white/[0.06] p-6 shadow-2xl shadow-black/30 backdrop-blur-xl sm:p-8 lg:p-10">
       <div className="absolute inset-0 bg-[linear-gradient(135deg,rgba(103,232,249,0.18),transparent_35%,rgba(240,171,252,0.18))]" />
@@ -720,6 +753,10 @@ function Hero({ readiness, xp, streak, quote }: { readiness: number; xp: number;
             </Button>
             <Button variant="secondary" asChild>
               <a href="#projects">Add project</a>
+            </Button>
+            <Button variant="outline" onClick={onReset}>
+              <RotateCcw className="h-4 w-4" />
+              Reset for new user
             </Button>
           </div>
         </motion.div>
